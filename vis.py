@@ -6,7 +6,7 @@ import socket
 unique_ips = dict()
 unique_routes = dict()
 
-with open('5k.csv') as csvfile:
+with open('Friday2.csv') as csvfile:
 	reader = csv.DictReader(csvfile)
 	for row in reader:
 		src = row["Source"]
