@@ -8,8 +8,13 @@ import time
 from struct import *
 import sys
 
+def eth_addr (a) :
+    b = "%.2x:%.2x:%.2x:%.2x:%.2x:%.2x" % (ord(a[0]) , ord(a[1]) , ord(a[2]), ord(a[3]), ord(a[4]) , ord(a[5]))
+    return b
+
 unique_ips = dict()
 unique_routes = dict()
+mcast_pkts = 0
 
 unique_ips_count =0
 unique_routes_count =0
@@ -17,17 +22,19 @@ def parse_packet(packet) :
 
     #parse ethernet header
     eth_length = 14
+    answer = 0
 
     eth_header = packet[:eth_length]
     eth = unpack('!6s6sH' , eth_header)
     eth_protocol = socket.ntohs(eth[2])
-        #  print 'Destination MAC : ' + eth_addr(packet[0:6]) + ' Source MAC : ' + eth_addr(packet[6:12]) + ' Protocol : ' + str(eth_protocol)
+#    print('P' + str(pkt) + ' Destination MAC : ' + eth_addr(packet[0:6]) + ' Source MAC : ' + eth_addr(packet[6:12]) + ' Protocol : ' + str(eth_protocol))
 
     if ord(packet[0]) & 0x01 :
-        #this is a multicast packet
+        #print('this is a multicast packet')
         return 0
 
     #Parse IP packets, IP Protocol number = 8
+
     if eth_protocol == 8 :
         #Parse IP header
         #take first 20 characters for the ip header
@@ -46,44 +53,52 @@ def parse_packet(packet) :
         protocol = iph[6]
         s_addr = socket.inet_ntoa(iph[8])
         d_addr = socket.inet_ntoa(iph[9])
-        answer = ( s_addr , d_addr ) 
+        answer = (eth_protocol, s_addr , d_addr ) 
         return answer
     else:
-	print("\n th protocol is " + format(eth_protocol,'04x' ))
-        return 0
+        #likely to be IPV6 0xdd86  , ARP 0608
+	print("Pkt " + str(pkt) + " the protocol is " + format(eth_protocol,'04x' ))
+        return answer
 
 
 print('opening pcap file ')
-r = pcapy.open_offline("Friday2.pcapng")
+r = pcapy.open_offline("laptop.pcapng")
+mcast_pkts = 0
+	
 pkt = 1
 tup = r.next()
 while  tup :
         (header,payload ) = tup
+	if  header is None :
+           print("\nPackets " + str(pkt) + ' Mcast ' + str(mcast_pkts)  + " IPs " + str(unique_ips_count) + " Routes " + str(unique_routes_count ))
+           break
         answer = parse_packet(payload)
         if answer is None :
-           print("\nPackets " + str(pkt) + " IPs " + str(unique_ips_count) + " Routes " + str(unique_routes_count ))
+           print("\nPackets " + str(pkt) +   ' Mcast ' + str(mcast_pkts) +  " IPs " + str(unique_ips_count) + " Routes " + str(unique_routes_count ))
            break
-        if answer is not 0:
-            (src,dst) = answer 
-        if ( src not in unique_ips ):
-            unique_ips[src]=1
-            unique_ips_count += 1
-        if ( dst not in unique_ips ):
-            unique_ips[dst]=1
-            unique_ips_count += 1
-        route =  (src,dst)
-        if ( route not in unique_routes ):
-        	unique_routes[route]=1
-                unique_routes_count += 1
-        else:
-        	unique_routes[route]+=1
-        pkt = pkt + 1
+	if answer is not 0:   
+           (prot,src,dst) = answer 
+           if ( prot is 0x0008 ):
+              if ( src not in unique_ips ):
+                  unique_ips[src]=1
+                  unique_ips_count += 1
+              if ( dst not in unique_ips ):
+                  unique_ips[dst]=1
+                  unique_ips_count += 1
+              route =  (src,dst)
+              if ( route not in unique_routes ):
+                   unique_routes[route]=1
+                   unique_routes_count += 1
+              else:
+           	unique_routes[route]+=1
 	if ( (pkt % 100) is 0 ) :
            print("Packets " + str(pkt) + " IPs " + str(unique_ips_count) + " Routes " + str(unique_routes_count ),end='\r')
+        pkt = pkt + 1
         tup = r.next()
 	
 
 
+print("processed packets " + str(pkt))
 print("building network graph  ")
 
 links_list = []
